@@ -28,14 +28,7 @@ endif
 
 PB12_COMPRESS := build/pb12$(EXESUFFIX)
 
-ifeq ($(PLATFORM),Darwin)
-DEFAULT := cocoa
-ENABLE_OPENAL ?= 1
-DL_EXT := dylib
-else
-DEFAULT := sdl
-endif
-
+DEFAULT := all
 
 NULL := /dev/null
 ifeq ($(PLATFORM),windows32)
@@ -405,7 +398,7 @@ lib: $(LIBDIR)/libsameboy.dll
 else
 lib: $(LIBDIR)/libsameboy.o $(LIBDIR)/libsameboy.a $(LIBDIR)/libsameboy.$(DL_EXT)
 endif
-all: sdl tester libretro lib
+all: bootroms libretro
 ifeq ($(PLATFORM),Darwin)
 all: cocoa ios-ipa ios-deb
 endif
@@ -779,7 +772,7 @@ $(BIN)/BootROMs/%.bin: BootROMs/%.asm $(OBJ)/BootROMs/SameBoyLogo.pb12
 
 # Libretro Core (uses its own build system)
 libretro:
-	CC=$(CC) CFLAGS="$(WARNINGS)" $(MAKE) -C libretro BOOTROMS_DIR=$(abspath $(BOOTROMS_DIR)) BIN=$(abspath $(BIN))
+	make -C libretro BOOTROMS_DIR=$(abspath $(BOOTROMS_DIR)) BIN=$(abspath $(BIN))
 
 # Install for Linux, and other FreeDesktop platforms.
 ifneq ($(FREEDESKTOP),)
