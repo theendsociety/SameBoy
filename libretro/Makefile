@@ -1,4 +1,4 @@
-STATIC_LINKING := 0
+STATIC_LINKING := 1
 AR             := ar
 
 CFLAGS := -Wall $(CFLAGS)
@@ -215,9 +215,8 @@ else ifneq (,$(findstring qnx,$(platform)))
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=$(CORE_DIR)/libretro/link.T -Wl,--no-undefined
 else ifeq ($(platform), emscripten)
-   TARGET := $(TARGET_NAME)_libretro_emscripten.bc
    fpic := -fPIC
-   SHARED := -shared -Wl,--version-script=$(CORE_DIR)/libretro/link.T -Wl,--no-undefined
+   SHARED := -shared
 else ifeq ($(platform), vita)
    TARGET := $(TARGET_NAME)_libretro_vita.a
    CC = arm-vita-eabi-gcc
