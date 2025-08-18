@@ -674,7 +674,8 @@ static void init_for_current_model(unsigned id)
 #ifdef WIIU
     GB_set_sample_rate(&gameboy[i], WIIU_SAMPLE_RATE);
 #else
-    GB_set_sample_rate(&gameboy[i], GB_get_clock_rate(&gameboy[i]) / 2);
+    // GB_set_sample_rate(&gameboy[i], GB_get_clock_rate(&gameboy[i]) / 2);
+        GB_set_sample_rate(&gameboy[i], 96000);    // fix sample rate
 #endif
     GB_apu_set_sample_callback(&gameboy[i], audio_callback);
     GB_set_rumble_callback(&gameboy[i], rumble_callback);
