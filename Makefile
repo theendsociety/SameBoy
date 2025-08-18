@@ -98,7 +98,7 @@ CPPP_FLAGS += -UGB_INTERNAL
 include version.mk
 COPYRIGHT_YEAR := $(shell grep -oE "20[2-9][0-9]" LICENSE)
 export VERSION
-CONF ?= debug
+CONF ?= release
 
 BIN := build/bin
 OBJ := build/obj
