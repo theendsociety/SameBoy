@@ -1540,13 +1540,15 @@ unsigned retro_get_region(void)
 
 bool retro_load_game_special(unsigned type, const struct retro_game_info *info, size_t num_info)
 {
-    if ((type == RETRO_GAME_TYPE_GAMEBOY_LINK_2P) && (num_info >= 2)) {
-        emulated_devices = 2;
-    }
-    else {
-        return false; /* all other types are unhandled for now */
-    }
-
+    // if ((type == RETRO_GAME_TYPE_GAMEBOY_LINK_2P) && (num_info >= 2)) {
+    //     emulated_devices = 2;
+    // }
+    // else {
+    //     return false; /* all other types are unhandled for now */
+    // }
+    
+    // @ simplified lsdj mode / same cart
+    emulated_devices = 2;
     check_variables();
 
     frame_buf = (uint32_t*)malloc(emulated_devices * MAX_VIDEO_PIXELS * sizeof(uint32_t));
@@ -1563,8 +1565,9 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info *info, 
 
     for (int i = 0; i < emulated_devices; i++) {
         enum rom_type content_type  = ROM_TYPE_INVALID;
-        const uint8_t *content_data = info[i].data;
-        size_t content_size         = info[i].size;
+        // @ gameinfo
+        const uint8_t *content_data = info[0].data;
+        size_t content_size         = info[0].size;
 
         content_type = check_rom_header(content_data, content_size);
 
