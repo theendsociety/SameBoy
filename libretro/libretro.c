@@ -1672,6 +1672,8 @@ bool retro_unserialize(const void *data, size_t size)
 
 }
 
+// @ largest possible buffer to hold both sram copies
+uint8_t _dual_save_buffer[131072 * 2];
 void *retro_get_memory_data(unsigned type)
 {
     void *data = NULL;
@@ -1705,6 +1707,9 @@ void *retro_get_memory_data(unsigned type)
     }
     else {
         switch (type) {
+            // @ force dual sram save
+            // _dual_save_buffer;
+            /*
             case RETRO_MEMORY_GAMEBOY_1_SRAM:
                 if (gameboy[0].cartridge_type->has_battery && gameboy[0].mbc_ram_size != 0) {
                     data = gameboy[0].mbc_ram;
@@ -1739,6 +1744,7 @@ void *retro_get_memory_data(unsigned type)
                 break;
             default:
                 break;
+                */
         }
     }
 
@@ -1778,9 +1784,17 @@ size_t retro_get_memory_size(unsigned type)
     }
     else {
         switch (type) {
+            // @ same rom - force for now
+            if (gameboy[0].cartridge_type->has_battery && gameboy[0].mbc_ram_size != 0) {
+                size = gameboy[0].mbc_ram_size;
+            }
+            else {
+                size = 0;
+            }
+            /*
             case RETRO_MEMORY_GAMEBOY_1_SRAM:
                 if (gameboy[0].cartridge_type->has_battery && gameboy[0].mbc_ram_size != 0) {
-                    size = gameboy[0].mbc_ram_size;
+                    size = gameboy[0].mbc_ram_size;c
                 }
                 else {
                     size = 0;
@@ -1806,6 +1820,7 @@ size_t retro_get_memory_size(unsigned type)
                 break;
             default:
                 break;
+            */
         }
     }
 
