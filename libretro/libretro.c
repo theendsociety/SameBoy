@@ -1607,46 +1607,59 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info *info, 
 
 size_t retro_serialize_size(void)
 {
+    // @ fix save allocation for sameboy2p
     static size_t maximum_save_size = 0;
-    if (maximum_save_size) {
-        return maximum_save_size * 2;
+    if (!maximum_save_size) {
+        GB_gameboy_t temp;
+        GB_init(&temp, GB_MODEL_DMG_B);
+        maximum_save_size = GB_get_save_state_size(&temp);
+        GB_free(&temp);
+
+        GB_init(&temp, GB_MODEL_CGB_E);
+        maximum_save_size = MAX(maximum_save_size, GB_get_save_state_size(&temp));
+        GB_free(&temp);
+
+        GB_init(&temp, GB_MODEL_SGB2);
+        maximum_save_size = MAX(maximum_save_size, GB_get_save_state_size(&temp));
+        GB_free(&temp);
     }
 
-    GB_gameboy_t temp;
+    size_t per_slot = maximum_save_size;
+    for (int i = 0; i < 2; i++) {
+        if (GB_is_inited(&gameboy[i])) {
+            size_t live = GB_get_save_state_size(&gameboy[i]);
+            if (live > per_slot) per_slot = live;
+        }
+    }
 
-    GB_init(&temp, GB_MODEL_DMG_B);
-    maximum_save_size = GB_get_save_state_size(&temp);
-    GB_free(&temp);
+    return per_slot * 2;
+}
 
-    GB_init(&temp, GB_MODEL_CGB_E);
-    maximum_save_size = MAX(maximum_save_size, GB_get_save_state_size(&temp));
-    GB_free(&temp);
-
-    GB_init(&temp, GB_MODEL_SGB2);
-    maximum_save_size = MAX(maximum_save_size, GB_get_save_state_size(&temp));
-    GB_free(&temp);
-
-    return maximum_save_size * 2;
+static size_t saveslot_size(void)
+{
+    return retro_serialize_size() / 2;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-
     if (!initialized || !data) {
         return false;
     }
 
-    size_t offset = 0;
+    size_t slot = saveslot_size();
+    if (size < slot * emulated_devices) {
+        return false;
+    }
 
-    for (int i = 0; i < emulated_devices; i++)  {
+    // zero the buffer so the unused tail of each slot is deterministic
+    memset(data, 0, slot * emulated_devices);
+
+    for (int i = 0; i < emulated_devices; i++) {
         size_t state_size = GB_get_save_state_size(&gameboy[i]);
-        if (state_size > size) {
+        if (state_size > slot) {
             return false;
         }
-
-        GB_save_state_to_buffer(&gameboy[i], ((uint8_t *) data) + offset);
-        offset += state_size;
-        size -= state_size;
+        GB_save_state_to_buffer(&gameboy[i], ((uint8_t *) data) + (i * slot));
     }
 
     return true;
@@ -1654,22 +1667,26 @@ bool retro_serialize(void *data, size_t size)
 
 bool retro_unserialize(const void *data, size_t size)
 {
-    for (int i = 0; i < emulated_devices; i++) {
-        size_t state_size = GB_get_save_state_size(&gameboy[i]);
-        if (state_size > size) {
-            return false;
-        }
-
-        if (GB_load_state_from_buffer(&gameboy[i], data, state_size)) {
-            return false;
-        }
-
-        size -= state_size;
-        data = ((uint8_t *)data) + state_size;
+    size_t slot = saveslot_size();
+    if (size < slot * emulated_devices) {
+        return false;
     }
 
-    return true;
+    bool any_failed = false;
+    for (int i = 0; i < emulated_devices; i++) {
+        size_t state_size = GB_get_save_state_size(&gameboy[i]);
+        if (state_size > slot) {
+            any_failed = true;
+            continue;
+        }
+        if (GB_load_state_from_buffer(&gameboy[i],
+                                       ((const uint8_t *) data) + (i * slot),
+                                       state_size)) {
+            any_failed = true;
+        }
+    }
 
+    return !any_failed;
 }
 
 // @ largest possible buffer to hold both sram copies
@@ -1706,10 +1723,12 @@ void *retro_get_memory_data(unsigned type)
         }
     }
     else {
-        switch (type) {
-            // @ force dual sram save
-            // _dual_save_buffer;
-            /*
+        // @ force dual sram save
+        memcpy(_dual_save_buffer, gameboy[0].mbc_ram, gameboy[0].mbc_ram_size);
+        memcpy(_dual_save_buffer + gameboy[0].mbc_ram_size, gameboy[1].mbc_ram, gameboy[1].mbc_ram_size);
+        data = _dual_save_buffer;
+        /*
+        // switch (type) {
             case RETRO_MEMORY_GAMEBOY_1_SRAM:
                 if (gameboy[0].cartridge_type->has_battery && gameboy[0].mbc_ram_size != 0) {
                     data = gameboy[0].mbc_ram;
@@ -1745,7 +1764,7 @@ void *retro_get_memory_data(unsigned type)
             default:
                 break;
                 */
-        }
+        // }
     }
 
     return data;
@@ -1783,15 +1802,15 @@ size_t retro_get_memory_size(unsigned type)
         }
     }
     else {
+        // @ same rom - force for now
+        if (gameboy[0].cartridge_type->has_battery && gameboy[0].mbc_ram_size != 0) {
+            size = gameboy[0].mbc_ram_size * 2;
+        }
+        else {
+            size = 0;
+        }
+        /*
         switch (type) {
-            // @ same rom - force for now
-            if (gameboy[0].cartridge_type->has_battery && gameboy[0].mbc_ram_size != 0) {
-                size = gameboy[0].mbc_ram_size;
-            }
-            else {
-                size = 0;
-            }
-            /*
             case RETRO_MEMORY_GAMEBOY_1_SRAM:
                 if (gameboy[0].cartridge_type->has_battery && gameboy[0].mbc_ram_size != 0) {
                     size = gameboy[0].mbc_ram_size;c
@@ -1820,8 +1839,8 @@ size_t retro_get_memory_size(unsigned type)
                 break;
             default:
                 break;
+            }
             */
-        }
     }
 
     return size;
