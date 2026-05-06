@@ -1353,7 +1353,6 @@ void retro_reset(void)
 
 void retro_run(void)
 {
-
     bool updated = false;
 
     if (!initialized) {
@@ -1525,8 +1524,12 @@ bool retro_load_game(const struct retro_game_info *info)
     return true;
 }
 
+static void dual_save_buffer_unalias(void);
+
 void retro_unload_game(void)
 {
+    // restore the original mbc_ram pointers so gb_free doesn't try to free _dual_save_buffer
+    dual_save_buffer_unalias();
     for (int i = 0; i < emulated_devices; i++) {
         log_cb(RETRO_LOG_INFO, "Unloading GB: %d\n", emulated_devices);
         GB_free(&gameboy[i]);
@@ -1607,7 +1610,6 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info *info, 
 
 size_t retro_serialize_size(void)
 {
-    // @ fix save allocation for sameboy2p
     static size_t maximum_save_size = 0;
     if (!maximum_save_size) {
         GB_gameboy_t temp;
@@ -1691,6 +1693,46 @@ bool retro_unserialize(const void *data, size_t size)
 
 // @ largest possible buffer to hold both sram copies
 uint8_t _dual_save_buffer[131072 * 2];
+
+static uint8_t *_orig_mbc_ram[2] = {NULL, NULL};
+
+// sameboy works on two separate arrays instead of contiguous memory in dual mode which complicates things
+// assigning each array to the sram ptr so we can write directly
+static void dual_save_buffer_alias(void)
+{
+    if (emulated_devices != 2) return;
+    if (!gameboy[0].mbc_ram || !gameboy[1].mbc_ram) return;
+
+    size_t s0 = gameboy[0].mbc_ram_size;
+    size_t s1 = gameboy[1].mbc_ram_size;
+    if (s0 + s1 > sizeof(_dual_save_buffer)) return;
+
+    if (gameboy[0].mbc_ram != _dual_save_buffer) {
+        _orig_mbc_ram[0] = gameboy[0].mbc_ram;
+        if (s0) memcpy(_dual_save_buffer, gameboy[0].mbc_ram, s0);
+        gameboy[0].mbc_ram = _dual_save_buffer;
+    }
+    if (gameboy[1].mbc_ram != _dual_save_buffer + s0) {
+        _orig_mbc_ram[1] = gameboy[1].mbc_ram;
+        if (s1) memcpy(_dual_save_buffer + s0, gameboy[1].mbc_ram, s1);
+        gameboy[1].mbc_ram = _dual_save_buffer + s0;
+    }
+}
+
+static void dual_save_buffer_unalias(void)
+{
+    for (int i = 0; i < 2; i++) {
+        if (_orig_mbc_ram[i]) {
+            if (gameboy[i].mbc_ram && gameboy[i].mbc_ram_size) {
+                memcpy(_orig_mbc_ram[i], gameboy[i].mbc_ram,
+                       gameboy[i].mbc_ram_size);
+            }
+            gameboy[i].mbc_ram = _orig_mbc_ram[i];
+            _orig_mbc_ram[i] = NULL;
+        }
+    }
+}
+
 void *retro_get_memory_data(unsigned type)
 {
     void *data = NULL;
@@ -1723,48 +1765,11 @@ void *retro_get_memory_data(unsigned type)
         }
     }
     else {
-        // @ force dual sram save
-        memcpy(_dual_save_buffer, gameboy[0].mbc_ram, gameboy[0].mbc_ram_size);
-        memcpy(_dual_save_buffer + gameboy[0].mbc_ram_size, gameboy[1].mbc_ram, gameboy[1].mbc_ram_size);
+        // dual-cart: alias both mbc_rams into _dual_save_buffer (idempotent)
+        // so this returns a live, contiguous pointer the frontend can read
+        // and write through.
+        dual_save_buffer_alias();
         data = _dual_save_buffer;
-        /*
-        // switch (type) {
-            case RETRO_MEMORY_GAMEBOY_1_SRAM:
-                if (gameboy[0].cartridge_type->has_battery && gameboy[0].mbc_ram_size != 0) {
-                    data = gameboy[0].mbc_ram;
-                }
-                else {
-                    data = NULL;
-                }
-                break;
-            case RETRO_MEMORY_GAMEBOY_2_SRAM:
-                if (gameboy[1].cartridge_type->has_battery && gameboy[1].mbc_ram_size != 0) {
-                    data = gameboy[1].mbc_ram;
-                }
-                else {
-                    data = NULL;
-                }
-                break;
-            case RETRO_MEMORY_GAMEBOY_1_RTC:
-                if (gameboy[0].cartridge_type->has_battery) {
-                    data = GB_GET_SECTION(&gameboy[0], rtc);
-                }
-                else {
-                    data = NULL;
-                }
-                break;
-            case RETRO_MEMORY_GAMEBOY_2_RTC:
-                if (gameboy[1].cartridge_type->has_battery) {
-                    data = GB_GET_SECTION(&gameboy[1], rtc);
-                }
-                else {
-                    data = NULL;
-                }
-                break;
-            default:
-                break;
-                */
-        // }
     }
 
     return data;
